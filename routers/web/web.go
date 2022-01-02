@@ -40,7 +40,7 @@ import (
 
 	"gitea.com/go-chi/captcha"
 	"github.com/NYTimes/gziphandler"
-	"github.com/go-chi/chi/middleware"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tstranex/u2f"
@@ -376,7 +376,6 @@ func RegisterRoutes(m *web.Route) {
 		m.Post("/activate", user.ActivatePost, reqSignIn)
 		m.Any("/activate_email", user.ActivateEmail)
 		m.Get("/avatar/{username}/{size}", user.AvatarByUserName)
-		m.Get("/email2user", user.Email2User)
 		m.Get("/recover_account", user.ResetPasswd)
 		m.Post("/recover_account", user.ResetPasswdPost)
 		m.Get("/forgot_password", user.ForgotPasswd)
@@ -484,9 +483,7 @@ func RegisterRoutes(m *web.Route) {
 		m.Get("/attachments/{uuid}", repo.GetAttachment)
 	}, ignSignIn)
 
-	m.Group("/{username}", func() {
-		m.Post("/action/{action}", user.Action)
-	}, reqSignIn)
+	m.Post("/{username}", reqSignIn, user.Action)
 
 	if !setting.IsProd {
 		m.Get("/template/*", dev.TemplatePreview)
@@ -702,6 +699,7 @@ func RegisterRoutes(m *web.Route) {
 		m.Group("/milestone", func() {
 			m.Get("/{id}", repo.MilestoneIssuesAndPulls)
 		}, reqRepoIssuesOrPullsReader, context.RepoRef())
+		m.Get("/compare", repo.MustBeNotEmpty, reqRepoCodeReader, repo.SetEditorconfigIfExists, ignSignIn, repo.SetDiffViewStyle, repo.SetWhitespaceBehavior, repo.CompareDiff)
 		m.Combo("/compare/*", repo.MustBeNotEmpty, reqRepoCodeReader, repo.SetEditorconfigIfExists).
 			Get(ignSignIn, repo.SetDiffViewStyle, repo.SetWhitespaceBehavior, repo.CompareDiff).
 			Post(reqSignIn, context.RepoMustNotBeArchived(), reqRepoPullsReader, repo.MustAllowPulls, bindIgnErr(forms.CreateIssueForm{}), repo.SetWhitespaceBehavior, repo.CompareAndPullRequestPost)
@@ -718,7 +716,7 @@ func RegisterRoutes(m *web.Route) {
 		}, context.RepoMustNotBeArchived(), reqRepoIssueReader)
 		// FIXME: should use different URLs but mostly same logic for comments of issue and pull request.
 		// So they can apply their own enable/disable logic on routers.
-		m.Group("/issues", func() {
+		m.Group("/{type:issues|pulls}", func() {
 			m.Group("/{index}", func() {
 				m.Post("/title", repo.UpdateIssueTitle)
 				m.Post("/content", repo.UpdateIssueContent)
@@ -897,7 +895,7 @@ func RegisterRoutes(m *web.Route) {
 						m.Delete("", repo.DeleteProjectBoard)
 						m.Post("/default", repo.SetDefaultProjectBoard)
 
-						m.Post("/{index}", repo.MoveIssueAcrossBoards)
+						m.Post("/move", repo.MoveIssues)
 					})
 				})
 			}, reqRepoProjectsWriter, context.RepoMustNotBeArchived())
@@ -1079,4 +1077,9 @@ func RegisterRoutes(m *web.Route) {
 	if setting.API.EnableSwagger {
 		m.Get("/swagger.v1.json", SwaggerV1Json)
 	}
+	m.NotFound(func(w http.ResponseWriter, req *http.Request) {
+		ctx := context.GetContext(req)
+		ctx.NotFound("", nil)
+	})
+
 }

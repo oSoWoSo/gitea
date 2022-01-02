@@ -13,8 +13,8 @@ import (
 	"net/url"
 	"strings"
 
-	"code.gitea.io/gitea/models"
 	"code.gitea.io/gitea/models/login"
+	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/modules/git"
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/setting"
@@ -29,6 +29,11 @@ type APIContext struct {
 	*Context
 	Org *APIOrganization
 }
+
+// Currently, we have the following common fields in error response:
+// * message: the message for end users (it shouldn't be used for error type detection)
+//            if we need to indicate some errors, we should introduce some new fields like ErrorCode or ErrorType
+// * url:     the swagger document URL
 
 // APIError is error format response
 // swagger:response error
@@ -47,8 +52,8 @@ type APIValidationError struct {
 // APIInvalidTopicsError is error format response to invalid topics
 // swagger:response invalidTopicsError
 type APIInvalidTopicsError struct {
-	Topics  []string `json:"invalidTopics"`
-	Message string   `json:"message"`
+	Message       string   `json:"message"`
+	InvalidTopics []string `json:"invalidTopics"`
 }
 
 //APIEmpty is an empty response
@@ -122,9 +127,9 @@ func (ctx *APIContext) InternalServerError(err error) {
 	})
 }
 
-var (
-	apiContextKey interface{} = "default_api_context"
-)
+type apiContextKeyType struct{}
+
+var apiContextKey = apiContextKeyType{}
 
 // WithAPIContext set up api context in request
 func WithAPIContext(req *http.Request, ctx *APIContext) *http.Request {
@@ -181,24 +186,24 @@ func (ctx *APIContext) SetLinkHeader(total, pageSize int) {
 	links := genAPILinks(ctx.Req.URL, total, pageSize, ctx.FormInt("page"))
 
 	if len(links) > 0 {
-		ctx.Header().Set("Link", strings.Join(links, ","))
+		ctx.RespHeader().Set("Link", strings.Join(links, ","))
 		ctx.AppendAccessControlExposeHeaders("Link")
 	}
 }
 
 // SetTotalCountHeader set "X-Total-Count" header
 func (ctx *APIContext) SetTotalCountHeader(total int64) {
-	ctx.Header().Set("X-Total-Count", fmt.Sprint(total))
+	ctx.RespHeader().Set("X-Total-Count", fmt.Sprint(total))
 	ctx.AppendAccessControlExposeHeaders("X-Total-Count")
 }
 
 // AppendAccessControlExposeHeaders append headers by name to "Access-Control-Expose-Headers" header
 func (ctx *APIContext) AppendAccessControlExposeHeaders(names ...string) {
-	val := ctx.Header().Get("Access-Control-Expose-Headers")
+	val := ctx.RespHeader().Get("Access-Control-Expose-Headers")
 	if len(val) != 0 {
-		ctx.Header().Set("Access-Control-Expose-Headers", fmt.Sprintf("%s, %s", val, strings.Join(names, ", ")))
+		ctx.RespHeader().Set("Access-Control-Expose-Headers", fmt.Sprintf("%s, %s", val, strings.Join(names, ", ")))
 	} else {
-		ctx.Header().Set("Access-Control-Expose-Headers", strings.Join(names, ", "))
+		ctx.RespHeader().Set("Access-Control-Expose-Headers", strings.Join(names, ", "))
 	}
 }
 
@@ -327,7 +332,7 @@ func ReferencesGitRepo(allowEmpty bool) func(http.Handler) http.Handler {
 
 			// For API calls.
 			if ctx.Repo.GitRepo == nil {
-				repoPath := models.RepoPath(ctx.Repo.Owner.Name, ctx.Repo.Repository.Name)
+				repoPath := repo_model.RepoPath(ctx.Repo.Owner.Name, ctx.Repo.Repository.Name)
 				gitRepo, err := git.OpenRepository(repoPath)
 				if err != nil {
 					ctx.Error(http.StatusInternalServerError, "RepoRef Invalid repo "+repoPath, err)
@@ -351,7 +356,7 @@ func ReferencesGitRepo(allowEmpty bool) func(http.Handler) http.Handler {
 // NotFound handles 404s for APIContext
 // String will replace message, errors will be added to a slice
 func (ctx *APIContext) NotFound(objs ...interface{}) {
-	var message = "Not Found"
+	var message = ctx.Tr("error.not_found")
 	var errors []string
 	for _, obj := range objs {
 		// Ignore nil
@@ -367,9 +372,9 @@ func (ctx *APIContext) NotFound(objs ...interface{}) {
 	}
 
 	ctx.JSON(http.StatusNotFound, map[string]interface{}{
-		"message":           message,
-		"documentation_url": setting.API.SwaggerURL,
-		"errors":            errors,
+		"message": message,
+		"url":     setting.API.SwaggerURL,
+		"errors":  errors,
 	})
 }
 
@@ -385,7 +390,7 @@ func RepoRefForAPI(next http.Handler) http.Handler {
 		var err error
 
 		if ctx.Repo.GitRepo == nil {
-			repoPath := models.RepoPath(ctx.Repo.Owner.Name, ctx.Repo.Repository.Name)
+			repoPath := repo_model.RepoPath(ctx.Repo.Owner.Name, ctx.Repo.Repository.Name)
 			ctx.Repo.GitRepo, err = git.OpenRepository(repoPath)
 			if err != nil {
 				ctx.InternalServerError(err)
