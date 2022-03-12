@@ -9,7 +9,8 @@ import "time"
 
 // Comment is a standard comment information
 type Comment struct {
-	IssueIndex  int64  `yaml:"issue_index"`
+	IssueIndex  int64 `yaml:"issue_index"`
+	Index       int64
 	PosterID    int64  `yaml:"poster_id"`
 	PosterName  string `yaml:"poster_name"`
 	PosterEmail string `yaml:"poster_email"`
@@ -18,3 +19,9 @@ type Comment struct {
 	Content     string
 	Reactions   []*Reaction
 }
+
+// GetExternalName ExternalUserMigrated interface
+func (c *Comment) GetExternalName() string { return c.PosterName }
+
+// ExternalID ExternalUserMigrated interface
+func (c *Comment) GetExternalID() int64 { return c.PosterID }

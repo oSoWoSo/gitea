@@ -162,13 +162,8 @@ func Create(ctx *context.Context) {
 func handleCreateError(ctx *context.Context, owner *user_model.User, err error, name string, tpl base.TplName, form interface{}) {
 	switch {
 	case repo_model.IsErrReachLimitOfRepo(err):
-		var msg string
-		maxCreationLimit := ctx.User.MaxCreationLimit()
-		if maxCreationLimit == 1 {
-			msg = ctx.Tr("repo.form.reach_limit_of_creation_1", maxCreationLimit)
-		} else {
-			msg = ctx.Tr("repo.form.reach_limit_of_creation_n", maxCreationLimit)
-		}
+		maxCreationLimit := owner.MaxCreationLimit()
+		msg := ctx.TrN(maxCreationLimit, "repo.form.reach_limit_of_creation_1", "repo.form.reach_limit_of_creation_n", maxCreationLimit)
 		ctx.RenderWithErr(msg, tpl, form)
 	case repo_model.IsErrRepoAlreadyExist(err):
 		ctx.Data["Err_RepoName"] = true
@@ -415,7 +410,7 @@ func Download(ctx *context.Context) {
 	}
 
 	var times int
-	var t = time.NewTicker(time.Second * 1)
+	t := time.NewTicker(time.Second * 1)
 	defer t.Stop()
 
 	for {
@@ -452,7 +447,7 @@ func download(ctx *context.Context, archiveName string, archiver *repo_model.Rep
 	}
 
 	if setting.RepoArchive.ServeDirect {
-		//If we have a signed url (S3, object storage), redirect to this directly.
+		// If we have a signed url (S3, object storage), redirect to this directly.
 		u, err := storage.RepoArchives.URL(rPath, downloadName)
 		if u != nil && err == nil {
 			ctx.Redirect(u.String())
@@ -460,7 +455,7 @@ func download(ctx *context.Context, archiveName string, archiver *repo_model.Rep
 		}
 	}
 
-	//If we have matched and access to release or issue
+	// If we have matched and access to release or issue
 	fr, err := storage.RepoArchives.Open(rPath)
 	if err != nil {
 		ctx.ServerError("Open", err)

@@ -30,8 +30,7 @@ func init() {
 }
 
 // CodebaseDownloaderFactory defines a downloader factory
-type CodebaseDownloaderFactory struct {
-}
+type CodebaseDownloaderFactory struct{}
 
 // New returns a downloader related to this factory according MigrateOptions
 func (f *CodebaseDownloaderFactory) New(ctx context.Context, opts base.MigrateOptions) (base.Downloader, error) {
@@ -64,7 +63,7 @@ type codebaseUser struct {
 	Email string `json:"email"`
 }
 
-// CodebaseDownloader implements a Downloader interface to get repository informations
+// CodebaseDownloader implements a Downloader interface to get repository information
 // from Codebase
 type CodebaseDownloader struct {
 	base.NullDownloader
@@ -88,7 +87,7 @@ func (d *CodebaseDownloader) SetContext(ctx context.Context) {
 func NewCodebaseDownloader(ctx context.Context, projectURL *url.URL, project, repoName, username, password string) *CodebaseDownloader {
 	baseURL, _ := url.Parse("https://api3.codebasehq.com")
 
-	var downloader = &CodebaseDownloader{
+	downloader := &CodebaseDownloader{
 		ctx:        ctx,
 		baseURL:    baseURL,
 		projectURL: projectURL,
@@ -111,7 +110,7 @@ func NewCodebaseDownloader(ctx context.Context, projectURL *url.URL, project, re
 	return downloader
 }
 
-// FormatCloneURL add authentification into remote URLs
+// FormatCloneURL add authentication into remote URLs
 func (d *CodebaseDownloader) FormatCloneURL(opts base.MigrateOptions, remoteAddr string) (string, error) {
 	return opts.CloneAddr, nil
 }
@@ -206,7 +205,7 @@ func (d *CodebaseDownloader) GetMilestones() ([]*base.Milestone, error) {
 		return nil, err
 	}
 
-	var milestones = make([]*base.Milestone, 0, len(rawMilestones.TicketingMilestone))
+	milestones := make([]*base.Milestone, 0, len(rawMilestones.TicketingMilestone))
 	for _, milestone := range rawMilestones.TicketingMilestone {
 		var deadline *time.Time
 		if len(milestone.Deadline.Value) > 0 {
@@ -256,7 +255,7 @@ func (d *CodebaseDownloader) GetLabels() ([]*base.Label, error) {
 		return nil, err
 	}
 
-	var labels = make([]*base.Label, 0, len(rawTypes.TicketingType))
+	labels := make([]*base.Label, 0, len(rawTypes.TicketingType))
 	for _, label := range rawTypes.TicketingType {
 		labels = append(labels, &base.Label{
 			Name:  label.Name,
@@ -372,6 +371,7 @@ func (d *CodebaseDownloader) GetIssues(page, perPage int) ([]*base.Issue, bool, 
 			poster := d.tryGetUser(note.UserID.Value)
 			comments = append(comments, &base.Comment{
 				IssueIndex:  issue.TicketID.Value,
+				Index:       note.ID.Value,
 				PosterID:    poster.ID,
 				PosterName:  poster.Name,
 				PosterEmail: poster.Email,
@@ -400,7 +400,8 @@ func (d *CodebaseDownloader) GetIssues(page, perPage int) ([]*base.Issue, bool, 
 			Created:     issue.CreatedAt.Value,
 			Updated:     issue.UpdatedAt.Value,
 			Labels: []*base.Label{
-				{Name: issue.Type.Name}},
+				{Name: issue.Type.Name},
+			},
 			Context: codebaseIssueContext{
 				foreignID: issue.TicketID.Value,
 				localID:   issue.TicketID.Value,
@@ -481,7 +482,11 @@ func (d *CodebaseDownloader) GetPullRequests(page, perPage int) ([]*base.PullReq
 				Type    string `xml:"type,attr"`
 				Comment []struct {
 					Content string `xml:"content"`
-					UserID  struct {
+					ID      struct {
+						Value int64  `xml:",chardata"`
+						Type  string `xml:"type,attr"`
+					} `xml:"id"`
+					UserID struct {
 						Value int64  `xml:",chardata"`
 						Type  string `xml:"type,attr"`
 					} `xml:"user-id"`
@@ -528,6 +533,7 @@ func (d *CodebaseDownloader) GetPullRequests(page, perPage int) ([]*base.PullReq
 			poster := d.tryGetUser(comment.UserID.Value)
 			comments = append(comments, &base.Comment{
 				IssueIndex:  number,
+				Index:       comment.ID.Value,
 				PosterID:    poster.ID,
 				PosterName:  poster.Name,
 				PosterEmail: poster.Email,
